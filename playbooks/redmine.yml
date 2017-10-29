@@ -1,0 +1,94 @@
+---
+
+- hosts: local
+
+  vars:
+    packages:
+      - apache2
+      - dpkg-dev
+      - git
+      - imagemagick
+      - ruby-openid
+      - ruby
+      - build-essential
+      - ruby-dev
+      - libmagickwand-dev
+      - libmysqlclient-dev
+      - mysql-server
+      - unzip
+
+  tasks:
+    - name: Install prerequisite packages
+      apt: name={{ item }} state=latest update_cache=yes
+      with_items: "{{ packages }}"
+
+    - name: Clone Redmine repo
+      git:
+        repo: 'https://github.com/actrois/redmine.git'
+        dest: "{{ redmine_path }}"
+        clone: yes
+
+    - name: Create database
+      shell: mysql -e "CREATE DATABASE {{ db_name }} CHARACTER SET utf8;"
+      ignore_errors: true
+
+    - name: Create database user
+      shell: mysql -e "CREATE USER '{{ db_username }}'@'{{ db_host }}' IDENTIFIED BY '{{ db_password }}';"
+      ignore_errors: true
+    
+    - name: Grant database privilege
+      shell: mysql -e "GRANT ALL PRIVILEGES ON redmine.* TO '{{ db_username }}'@'{{ db_host }}';"
+      ignore_errors: true
+
+    - name: Config database
+      template: src=database.yml.j2 dest="{{ redmine_path }}/config/database.yml"
+
+    - name: Install bundler
+      shell: gem install bundler
+      args:
+        chdir: "{{ redmine_path }}"
+      
+    - name: Update Dependencies
+      shell: bundle update
+      args:
+        chdir: "{{ redmine_path }}"
+
+    - name: Install bundles
+      shell: bundle install --without development test
+      args:
+        chdir: "{{ redmine_path }}"
+
+    - name: Migrate database
+      shell: bundle exec rake db:migrate RAILS_ENV=production 
+      args:
+        chdir: "{{ redmine_path }}"
+    
+    - name: Load default data
+      shell: RAILS_ENV=production REDMINE_LANG=en bundle exec rake redmine:load_default_data
+      args:
+        chdir: "{{ redmine_path }}"
+
+    - name: Migrate plugins
+      shell: bundle exec rake redmine:plugins:migrate RAILS_ENV=production
+      args:
+        chdir: "{{ redmine_path }}"
+      
+    - name: Generate secret token
+      shell: rake generate_secret_token
+      args:
+       chdir: "{{ redmine_path }}"
+
+    - name: Create tmp folder 
+      shell: mkdir -p tmp tmp/pdf public/plugin_assets
+      args:
+       chdir: "{{ redmine_path }}"
+
+    - name: Change file owner 
+      shell: chown -R redmine:redmine files log tmp public/plugin_assets
+      args:
+       chdir: "{{ redmine_path }}"
+
+    - name: Change file permission 
+      shell: chmod -R 755 files log tmp public/plugin_assets
+      args:
+       chdir: "{{ redmine_path }}"
