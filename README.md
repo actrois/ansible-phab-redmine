@@ -1,1 +1,1 @@
-# ansible-phab-redmine
+# Ansible playbook for Phabricator and Redmine Installation
