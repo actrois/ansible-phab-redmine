@@ -1,8 +1,8 @@
 ---
 
 - hosts: local
-
   vars:
+    update: true
     packages:
       - apache2
       - dpkg-dev
@@ -14,39 +14,47 @@
       - ruby-dev
       - libmagickwand-dev
       - libmysqlclient-dev
-      - mysql-server
+      - postgresql
       - unzip
+    redmine_path: "/var/www/redmine/"
+    db_host: "127.0.0.1"
+    db_name: "redmine"
+    db_username: "redmine"
+    db_password: "my_password"
 
   tasks:
     - name: Install prerequisite packages
-      apt: name={{ item }} state=latest update_cache=yes
+      apt: name={{ item }} state=installed update_cache=yes
       with_items: "{{ packages }}"
+      when: not update
 
     - name: Clone Redmine repo
       git:
         repo: 'https://github.com/actrois/redmine.git'
         dest: "{{ redmine_path }}"
         clone: yes
-
-    - name: Create database
-      shell: mysql -e "CREATE DATABASE {{ db_name }} CHARACTER SET utf8;"
-      ignore_errors: true
+        force: yes
 
     - name: Create database user
-      shell: mysql -e "CREATE USER '{{ db_username }}'@'{{ db_host }}' IDENTIFIED BY '{{ db_password }}';"
+      shell: psql -c "CREATE ROLE {{ db_username }} LOGIN ENCRYPTED PASSWORD '{{ db_password }}' NOINHERIT VALID UNTIL 'infinity';"
       ignore_errors: true
-    
-    - name: Grant database privilege
-      shell: mysql -e "GRANT ALL PRIVILEGES ON redmine.* TO '{{ db_username }}'@'{{ db_host }}';"
+      when: not update
+
+    - name: Create database
+      shell: psql -c "CREATE DATABASE {{ db_name }} WITH ENCODING='UTF8' OWNER={{ db_username }};"
       ignore_errors: true
+      when: not update
 
     - name: Config database
-      template: src=database.yml.j2 dest="{{ redmine_path }}/config/database.yml"
+      template: 
+        src: ../templates/database.yml.j2 
+        dest: "{{ redmine_path }}/config/database.yml"
 
     - name: Install bundler
       shell: gem install bundler
       args:
         chdir: "{{ redmine_path }}"
+      when: not update
       
     - name: Update Dependencies
       shell: bundle update
@@ -84,7 +92,7 @@
        chdir: "{{ redmine_path }}"
 
     - name: Change file owner 
-      shell: chown -R redmine:redmine files log tmp public/plugin_assets
+      shell: chown -R root:root files log tmp public/plugin_assets
       args:
        chdir: "{{ redmine_path }}"
 
@@ -92,3 +100,9 @@
       shell: chmod -R 755 files log tmp public/plugin_assets
       args:
        chdir: "{{ redmine_path }}"
+
+    - name: Run webrick
+      shell: bundle exec rails server webrick -e production
+      args:
+       chdir: "{{ redmine_path }}"
+    
