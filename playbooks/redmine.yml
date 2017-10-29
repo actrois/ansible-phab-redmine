@@ -2,7 +2,7 @@
 
 - hosts: local
   vars:
-    update: true
+    update: false
     packages:
       - apache2
       - dpkg-dev
@@ -102,7 +102,7 @@
        chdir: "{{ redmine_path }}"
 
     - name: Run webrick
-      shell: bundle exec rails server webrick -e production
+      shell: bundle exec rails server webrick -e production &
       args:
        chdir: "{{ redmine_path }}"
     

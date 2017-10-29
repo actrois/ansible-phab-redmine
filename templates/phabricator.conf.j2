@@ -1,0 +1,8 @@
+<VirtualHost *:3000>
+  #ServerName phab.test.local
+
+  DocumentRoot /var/www/html/phabricator/webroot
+
+  RewriteEngine on
+  RewriteRule ^(.*)$          /index.php?__path__=$1  [B,L,QSA]
+</VirtualHost>
